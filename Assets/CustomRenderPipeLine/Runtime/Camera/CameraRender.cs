@@ -1,6 +1,6 @@
 using UnityEngine;
 using UnityEngine.Rendering;
-using UnityEngine.Experimental.Rendering.RenderGraphModule;
+using UnityEngine.Rendering.RenderGraphModule;
 
 //使用一个CameraRender类来专门对每个摄像机进行渲染
 //目的为了将摄像机能看到的东西画出来
@@ -48,6 +48,19 @@ public class CameraRender
             cameraSampler = ProfilingSampler.Get(_camera.cameraType);
             cameraSettings = _defaultCameraSettings;
         }
+
+#if UNITY_EDITOR
+#pragma warning disable 0618
+        if (cameraSettings.renderingLayerMask != 0)
+        {
+            cameraSettings.newRenderLayerMask = (uint)cameraSettings.renderingLayerMask;
+            cameraSettings.renderingLayerMask = 0;
+            UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(
+                UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene()
+            );
+        }
+#pragma warning restore 0618
+#endif
 
         bool useColorTexture;
         bool useDepthTexture;
@@ -131,16 +144,19 @@ public class CameraRender
 
         //使用RenderGraph使所有命令缓冲的执行和渲染都在其中进行
         //放在using中可以简单的不使用.Dispose() 相当于一个try块，finally中会调用dispose
-        using (renderGraph.RecordAndExecute(renderGraphParameters))
+        //using (renderGraph.RecordAndExecute(renderGraphParameters))
+        //RenderGraph.RecordAndExecute方法不再存在。我们现在必须明确开始和结束记录，然后在中执行，而不是依赖空的一次性对象CameraRenderer.Render。
+        renderGraph.BeginRecording(renderGraphParameters);
+        using (new RenderGraphProfilingScope(renderGraph, cameraSampler))
         {
             //做一个记录步骤 不需要手动在任何地方访问它
-            using var _ = new RenderGraphProfilingScope(renderGraph, cameraSampler);
+            //using var _ = new RenderGraphProfilingScope(renderGraph, cameraSampler);
 
             //rendergraph的过程
             //光照设置
             LightResource lightResource = LightingPass.Recode(renderGraph,
                 _cullingResults, shadowSettings, setting.forwardPlusSettings,
-                cameraSettings.renderingLayerMask, bufferSize); //useLightPerObject, 
+                cameraSettings.renderingLayerMask, bufferSize, context); //useLightPerObject, 
 
             //应在渲染常规几何体之前渲染阴影
             //设置摄像机参数
@@ -195,6 +211,7 @@ public class CameraRender
             GizmosPass.Record(renderGraph, copier, cameraRendererTextures); //, useIntermediateBuffer
         }
 
+        renderGraph.EndRecordingAndExecute();
         //在命令提交之前请求清理
         context.ExecuteCommandBuffer(_commandBuffer);
         context.Submit();

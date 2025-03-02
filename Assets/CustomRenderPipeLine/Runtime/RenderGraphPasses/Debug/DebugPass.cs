@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using UnityEngine;
-using UnityEngine.Experimental.Rendering.RenderGraphModule;
+using UnityEngine.Rendering.RenderGraphModule;
 using UnityEngine.Rendering;
 
 public class DebugPass
@@ -13,12 +13,11 @@ public class DebugPass
     public static void Recode(RenderGraph renderGraph, CustomRenderPipelineSetting setting,
         Camera renderCamera, in LightResource lightResource)
     {
-        if (CameraDebugger.IsActive && renderCamera.cameraType < CameraType.SceneView &&
-            !setting.useLightPerObject)
+        if (CameraDebugger.IsActive && renderCamera.cameraType < CameraType.SceneView)// && !setting.useLightPerObject)
         {
             using RenderGraphBuilder builder = renderGraph.AddRenderPass(
                 Sampler.name, out DebugPass debugPass, Sampler);
-            builder.ReadComputeBuffer(lightResource.tilesBuffer);
+            builder.ReadBuffer(lightResource.tilesBuffer);
             builder.SetRenderFunc<DebugPass>(
                 static (pass, context) => CameraDebugger.Render(context));
         }
